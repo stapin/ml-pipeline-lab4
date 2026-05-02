@@ -1,0 +1,52 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB = credentials('dockerhub-creds')
+        VAULT_PASS = credentials('ansible-vault-pass')
+        IMAGE_NAME = "amazon-rating-prediction"
+        DB_CONTAINER_NAME = "oracle-test-db"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Run Scenario Tests') {
+            steps {
+                sh "docker rm -f $DB_CONTAINER_NAME || true"
+                
+                sh "docker pull $DOCKERHUB_USR/$IMAGE_NAME:latest"
+
+                echo "Starting infrastructure and waiting for healthchecks..."
+                withEnv(["API_IMAGE=$DOCKERHUB_USR/$IMAGE_NAME:latest", "API_URL=http://amazon-rating-prediction:8000"]) {
+                    sh '''
+                        cp .env.example .env
+                        docker compose --profile test run --rm integration-tests
+                    '''
+                }
+            }
+        }
+
+    }
+
+    post {
+        success {
+            echo "CD pipline tests successfully done!"
+        }
+        failure {
+            echo "Tests failed!"
+            sh "docker compose logs integration-tests || true"
+            sh "docker compose logs $IMAGE_NAME || true"
+            sh "docker compose logs oracle-db || true"
+        }
+        cleanup {
+            sh "docker compose down -v || true"
+            sh "rm -f .env || true"
+            sh "docker logout || true"
+        }
+    }
+}

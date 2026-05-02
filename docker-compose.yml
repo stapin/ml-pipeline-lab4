@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  vault-provisioner:
+    build: 
+      context: .
+      dockerfile: ./vault/Dockerfile
+    volumes:
+      - secrets-flow:/shared
+    secrets:
+      - vault_password
+
+  oracle-db:
+    image: gvenzl/oracle-free:slim
+    container_name: oracle_db
+    environment:
+      - APP_USER=${DB_USER}
+      - ORACLE_PASSWORD_FILE=/run/secrets/db_pass.txt
+      - APP_USER_PASSWORD_FILE=/run/secrets/db_pass.txt
+    ports:
+      - "1521:1521"
+    volumes:
+      - secrets-flow:/run/secrets
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      vault-provisioner:
+        condition: service_completed_successfully
+
+  amazon-rating-prediction:
+    build: .
+    image: ${API_IMAGE:-rating-prediction-local}
+    container_name: rating-prediction
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_SERVICE=${DB_SERVICE}
+    volumes:
+      - secrets-flow:/run/secrets
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+
+  integration-tests:
+    build: 
+      context: .
+      dockerfile_inline: |
+        FROM python:3.9-slim
+        WORKDIR /app
+        COPY ./tests /app/tests
+        RUN pip install requests
+        CMD ["python", "tests/run_scenario.py"]
+    profiles: ["test"]
+    environment:
+      - API_URL=http://amazon-rating-prediction:8000
+    depends_on:
+      amazon-rating-prediction:
+        condition: service_healthy
+volumes:
+  secrets-flow:
+
+secrets:
+  vault_password:
+    environment: "VAULT_PASS"
