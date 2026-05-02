@@ -79,7 +79,7 @@ pipeline {
         }
         success {
             echo "Pipeline done! Image in DockerHub."
-            build job: 'amazon-rating-prediction-3-CD', 
+            build job: 'amazon-rating-prediction-4-CD', 
             parameters: [string(name: 'SOURCE_BRANCH', value: env.GIT_BRANCH.replace("origin/", ""))], 
             wait: true
         }
