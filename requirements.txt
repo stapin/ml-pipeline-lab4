@@ -11,3 +11,4 @@ oracledb
 python-dotenv
 ansible-vault
 pyyaml
+kafka-python-ng

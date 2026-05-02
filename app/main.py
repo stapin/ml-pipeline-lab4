@@ -1,23 +1,26 @@
+from functools import lru_cache
 from fastapi import FastAPI, Depends
 from contextlib import asynccontextmanager
-from functools import lru_cache
+
 from app.schemas import ReviewRequest, ReviewResponse
 from app.model import Predictor
+from app.kafka_producer_manager import KafkaProducerManager
 
-from app.database import OracleDBManager
-
-predictor = Predictor()
 
 @lru_cache()
-def get_db_manager() -> OracleDBManager:
-    return OracleDBManager()
+def get_predictor() -> Predictor:
+    return Predictor()
+
+@lru_cache()
+def get_kafka_manager() -> KafkaProducerManager:
+    return KafkaProducerManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db_manager = get_db_manager()
-    db_manager.init_database()
-    
+    manager = get_kafka_manager()
+    manager.connect()
     yield
+    manager.close()
 
 app = FastAPI(
     title="Amazon Beauty Rating Predictor API",
@@ -26,10 +29,14 @@ app = FastAPI(
 )
 
 @app.post("/predict", response_model=ReviewResponse)
-def predict_rating(request: ReviewRequest, db: OracleDBManager = Depends(get_db_manager)):
+def predict_rating(
+    request: ReviewRequest,
+    predictor: Predictor = Depends(get_predictor),
+    kafka_manager: KafkaProducerManager = Depends(get_kafka_manager)
+):
     input_dict = request.model_dump() 
     rating = predictor.predict(input_dict)
 
-    db.save_prediction(input_dict['full_text'], rating)
+    kafka_manager.send_prediction(input_dict['full_text'], rating)
 
     return ReviewResponse(predicted_rating=rating)

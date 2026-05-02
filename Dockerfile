@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY models/ ./models/
 COPY secrets.vault .
+COPY consumer/ ./consumer/
 
 EXPOSE 8000
 

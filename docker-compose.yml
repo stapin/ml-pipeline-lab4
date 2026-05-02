@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   vault-provisioner:
     build: 
@@ -30,6 +28,29 @@ services:
       vault-provisioner:
         condition: service_completed_successfully
 
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    environment:
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   amazon-rating-prediction:
     build: .
     image: ${API_IMAGE:-rating-prediction-local}
@@ -38,10 +59,8 @@ services:
       - "8000:8000"
     restart: unless-stopped
     environment:
-      - DB_USER=${DB_USER}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_SERVICE=${DB_SERVICE}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=predictions
     volumes:
       - secrets-flow:/run/secrets
     healthcheck:
@@ -50,7 +69,28 @@ services:
       timeout: 3s
       retries: 5
     depends_on:
+      kafka:
+        condition: service_healthy
+
+  rating-consumer:
+    build: .
+    image: ${API_IMAGE:-rating-prediction-local}
+    container_name: rating-consumer
+    restart: unless-stopped
+    command: ["python", "-m", "consumer.main"]
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_SERVICE=${DB_SERVICE}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=predictions
+    volumes:
+      - secrets-flow:/run/secrets
+    depends_on:
       oracle-db:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
   integration-tests:
@@ -68,6 +108,7 @@ services:
     depends_on:
       amazon-rating-prediction:
         condition: service_healthy
+
 volumes:
   secrets-flow:
 
