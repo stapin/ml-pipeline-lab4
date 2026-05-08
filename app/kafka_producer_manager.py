@@ -13,7 +13,7 @@ class KafkaProducerManager:
             bootstrap_servers=self.servers,
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
         )
-        print(f"Kafka Producer подключен к {self.servers}")
+        print(f"Kafka Producer connected to {self.servers}")
     
     def close(self):
         if self.producer:
@@ -25,4 +25,4 @@ class KafkaProducerManager:
             "predicted_rating": rating
         }
         self.producer.send(self.topic, message)
-        self.producer.flush() # Гарантируем отправку
+        self.producer.flush()

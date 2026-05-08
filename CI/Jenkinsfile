@@ -6,7 +6,7 @@ pipeline {
         MINIO_SECRET = credentials('minio-secret-key')
         VAULT_PASS = credentials('ansible-vault-pass')
         
-        IMAGE_NAME = "amazon-rating-prediction"
+        IMAGE_NAME = "amazon-rating-prediction-4"
         IMAGE_TAG = "pr-${env.BUILD_NUMBER}"
     }
 

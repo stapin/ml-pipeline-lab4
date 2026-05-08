@@ -29,7 +29,7 @@ class KafkaPredictionConsumer:
             for message in self.consumer:
                 self._process_message(message.value)
         except KeyboardInterrupt:
-            print("Consumer остановлен пользователем.")
+            print("Consumer interrupted.")
         finally:
             self.consumer.close()
 
